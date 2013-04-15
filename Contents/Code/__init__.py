@@ -1,8 +1,5 @@
-####################################################################################################
 TITLE = "Food Network Canada"
-ART = 'art-default.jpg'
-ICON = 'icon-default.png'
-FOOD_PARAMS         = ["6yC6lGVHaVA8oWSm1F9PaIYc9tOTzDqY", "z/FOODNET%20Player%20-%20Video%20Centre"]
+FOOD_PARAMS = ["6yC6lGVHaVA8oWSm1F9PaIYc9tOTzDqY", "z/FOODNET%20Player%20-%20Video%20Centre"]
 FEED_LIST = "http://feeds.theplatform.com/ps/JSON/PortalService/2.2/getCategoryList?PID=%s&startIndex=1&endIndex=500&query=hasReleases&query=CustomText|PlayerTag|%s&field=airdate&field=fullTitle&field=author&field=description&field=PID&field=thumbnailURL&field=title&contentCustomField=title&field=ID&field=parent"
 FEEDS_LIST = "http://feeds.theplatform.com/ps/JSON/PortalService/2.2/getReleaseList?field=ID&field=contentID&field=PID&field=URL&field=airdate&PID=%s&contentCustomField=Episode&contentCustomField=Season&query=CategoryIDs|%s&field=thumbnailURL&field=title&field=length&field=description&startIndex=1&endIndex=500&sortField=airdate&sortDescending=true"
 DIRECT_FEED = "http://release.theplatform.com/content.select?format=SMIL&pid=%s&UserName=Unknown&Embedded=True"
@@ -11,20 +8,11 @@ IGNORED = ["FOODNETVC", "Most Recent", "Video Blogs", "Video Bites", "FOODNETHOS
 
 ###################################################################################################
 def Start():
-    # Setup the default attributes for the ObjectContainer
     ObjectContainer.title1 = TITLE
-    ObjectContainer.art = R(ART)
-    
-    # Setup the default attributes for the other objects
-    DirectoryObject.thumb = R(ICON)
-    DirectoryObject.art = R(ART)
-    EpisodeObject.thumb = R(ICON)
-    EpisodeObject.art = R(ART)
-
     HTTP.CacheTime = CACHE_1HOUR
 
 ####################################################################################################
-@handler("/video/food_network_canada", TITLE, ICON, ART)
+@handler("/video/food_network_canada", TITLE)
 def MainMenu():
     oc = ObjectContainer()
     network = FOOD_PARAMS
@@ -114,7 +102,7 @@ def VideosPage(pid, iid, show):
                         title = title,
                         summary=summary,
                         duration=duration,
-                        thumb = Resource.ContentsOfURLWithFallback(url=thumb_url, fallback=ICON),
+                        thumb = Resource.ContentsOfURLWithFallback(url=thumb_url),
                         originally_available_at = originally_available_at,
                         season = seasonint,
                         index = episodeint
@@ -129,7 +117,7 @@ def VideosPage(pid, iid, show):
                         title = title,
                         summary=summary,
                         duration=duration,
-                        thumb = Resource.ContentsOfURLWithFallback(url=thumb_url, fallback=ICON),
+                        thumb = Resource.ContentsOfURLWithFallback(url=thumb_url),
                         originally_available_at = originally_available_at
                         )
                     )
@@ -156,7 +144,7 @@ def SeasonsPage(network, showtitle):
                     DirectoryObject(
                         key = Callback(VideosPage, pid=network[0], iid=iid, show=showtitle),
                             title = title,
-                            thumb = Resource.ContentsOfURLWithFallback(url=thumb_url, fallback=ICON)
+                            thumb = Resource.ContentsOfURLWithFallback(url=thumb_url)
                             )
                         )
         
