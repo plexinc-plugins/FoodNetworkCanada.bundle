@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.plexapp.plugins.food_network_canada</string>
+	<string>com.plexapp.plugins.foodnetworkcanada</string>
 	<key>PlexFrameworkFlags</key>
 	<array>
 		<string>UseRealRTMP</string>
