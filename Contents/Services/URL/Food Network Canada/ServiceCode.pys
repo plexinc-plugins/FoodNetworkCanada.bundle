@@ -1,0 +1,100 @@
+NAMESPACES = {"a":"http://www.w3.org/2001/SMIL20/Language", "x":"http://www.w3.org/1999/xhtml"}
+SMIL_URL = "http://release.theplatform.com/content.select?format=SMIL&pid=%s&Embedded=True&Tracking=True"
+RE_PID = Regex('pid: "(.+?)",')
+
+####################################################################################################
+def NormalizeURL(url):
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+	smil = GetSMIL(url)
+	details = GetSRC(smil)
+
+	title = details.get('title')
+	summary = details.get('abstract')
+	duration = int(details.get('dur').strip('ms'))
+	try:
+		source = details.get('provider')
+	except:
+		try:
+			source = details.get('author')
+		except:
+			source = ''	
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		source_title = source
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	# pretty much all we get is 480p from these guys
+	return [
+		MediaObject(
+			video_resolution = "480",
+			audio_channels = 2,
+			parts = [PartObject(key=Callback(PlayVideo, url=url))]
+		)
+	]
+
+
+####################################################################################################
+@indirect
+def PlayVideo(url):
+	smil = GetSMIL(url)
+	details = GetSRC(smil)
+
+	src = details.get('src')
+	if 'akamai.net' in src:
+		# this is a direct mp4 video link
+		return IndirectResponse(VideoClipObject, key=src)
+	
+	# otherwise this is an rtmp/rtmpe link
+	src = src.split('{break}')	
+	# on a small handfull of their older videos it's <break> instead of {break}
+	# and needs different handling later
+	if len(src) < 2:
+		src = details.get('src').split('<break>')
+
+	player = src[0].split('ondemand/')[0]+'ondemand/'
+	app = 'ondemand' + src[0].split('ondemand')[1]
+	clip = src[1].replace(".flv","") # replace .flv needed if legacy <break> was used
+	if '.mp4' in clip:
+		clip = 'MP4:' + clip.split('.mp4')[0]
+	
+	return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=player, clip=clip))
+
+####################################################################################################
+def GetSMIL(url):
+	page = HTTP.Request(url).content
+	pID = RE_PID.search(page).group(1)
+	smil = XML.ElementFromURL(SMIL_URL % pID)
+	return smil
+
+####################################################################################################
+def GetSRC(smil):
+	src_list = smil.xpath('//a:ref', namespaces=NAMESPACES)
+	
+	if src_list[0].get('src') == "Unavailable.flv":
+		if src_list[0].get('abstract') == "You are not in a geographic region that has access to this content.":
+			# content is geo blocked
+			raise Ex.MediaGeoblocked
+		else:
+			# just a general failure of the media not being available
+			raise Ex.MediaNotAvailable
+
+	if len(src_list) == 1:
+		return src_list[0]
+	else:
+		for ref in src_list:
+			if ref.get('src').startswith('pfadx'):
+				pass
+			elif ref.get('src').startswith('rtmp'):
+				return ref
+			else:
+				return ref
+	return None
