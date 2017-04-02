@@ -1,5 +1,9 @@
+'''
+
+Episode URL: http://www.foodnetwork.ca/shows/chuck-and-dannys-road-trip/video/episode/acadian-feast-from-the-east/video.html?v=909417027988
+'''
+
 FEED_URL = 'http://feed.theplatform.com/f/dtjsEC/ukK8o58zbRmJ?form=json&byId=%s'
-RE_ID = Regex('contentID: "(\d+)"')
 SMIL_NS = {'a': 'http://www.w3.org/2005/SMIL21/Language'}
 
 ####################################################################################################
@@ -62,37 +66,49 @@ def MediaObjectsForURL(url):
     ]
 
 ####################################################################################################
+# http://www.foodnetwork.ca/shows/chuck-and-dannys-road-trip/video/episode/acadian-feast-from-the-east/video.html?v=909417027988
+
 @indirect
 def PlayVideo(url, **kwargs):
 
+    # Return example: 909417027988
     content_id = GetContentId(url)
 
     if not content_id:
         raise Ex.MediaNotAvailable
 
-    data = JSON.ObjectFromURL(FEED_URL % (content_id))
-    media_content = data['entries'][0]['media$content'][0]['plfile$url']
+    Log.Debug('* Getting video URL from: {}'.format(FEED_URL % (content_id)))
 
-    if 'manifest=f4m' in media_content:
-        media_content = media_content.replace('f4m', 'm3u')
-    elif not 'manifest' in media_content:
-        media_content = '%s&manifest=m3u' % (media_content)
+    # Example URL: http://feed.theplatform.com/f/dtjsEC/ukK8o58zbRmJ?form=json&byId=909417027988
+    data = JSON.ObjectFromURL(FEED_URL % (content_id))
+    media_content = data['entries'][0]['media$content']
+
+    # Filter out non-video files and files without correct assetType; it seems that 
+    # only videos with assettype contains 'medium' will play without getting a 403;
+    # those videos are available @ video.foodnetwork.ca, whereas the unplayable sources
+    # are at foodnetwork-vh.akamaihd.net. 
+    # Possible assetTypes I've seen: "MP4 MBR", "DesktopHLS Default", "medium"
+    #
+    # We then sort by bitrate and then select the 
+    # highest bitrate, in case there are more than one result. Most cases there are only 1.
+    media_content = filter(lambda x: 'video' == x['plfile$contentType'] and 'medium' in x['plfile$assetTypes'], media_content)
+    media_content = sorted(media_content, lambda x: x['plfile$bitrate'])
+    media_content = media_content[0]['plfile$url']
+
+    # Example: http://link.theplatform.com/s/dtjsEC/bBKZI5cvUezM?feed=PROD%20-%20Food%20Videodrome%20Feed&mbr=true&format=SMIL&callback=jQuery1102019575666810641956_1491062935333
+
+    Log.Debug('* SMIL URL: {}'.format(media_content))
 
     xml = XML.ElementFromURL(media_content)
+
+    # Example: http://video.foodnetwork.ca/984/679/FOOD_ChuckDanny_E105_high_16x9.mp4?__hdnea__=st=1491057190~exp=1491064390~acl=/984/679/FOOD_ChuckDanny_E105_high_16x9.mp4*~hmac=4410bc12ddb93a81568260746a4aa6263451641e6180502e3141cb56f1c92f8a
     video_src = xml.xpath('//a:video/@src', namespaces=SMIL_NS)[0].replace('https://', 'http://')
+
+    Log.Debug('* Video URL: {}'.format(video_src))
 
     return IndirectResponse(VideoClipObject, key=video_src)
 
 ####################################################################################################
 def GetContentId(url):
 
-    html = HTML.ElementFromURL(url)
-    content_id = None
-
-    for text in html.xpath('//script/text()'):
-        match = RE_ID.search(text)
-
-        if match:
-            content_id = match.group(1)
-
-    return content_id
+    return url.rsplit('?v=', 1)[1]

@@ -12,5 +12,7 @@
 	<array>
 		<string>CA</string>
 	</array>
+	<key>PlexPluginDevMode</key>
+	<string>1</string>
 </dict>
 </plist>
