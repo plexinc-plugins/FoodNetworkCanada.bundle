@@ -1,34 +1,42 @@
-'''
+import ssl, urllib2
 
+'''
 Episode URL: http://www.foodnetwork.ca/shows/chuck-and-dannys-road-trip/video/episode/acadian-feast-from-the-east/video.html?v=909417027988
 '''
 
-FEED_URL = 'http://feed.theplatform.com/f/dtjsEC/ukK8o58zbRmJ?form=json&byId=%s'
-SMIL_NS = {'a': 'http://www.w3.org/2005/SMIL21/Language'}
+FEED_URL = 'http://feed.theplatform.com/f/dtjsEC/ukK8o58zbRmJ/{}'
+
+####################################################################################################
+def NormalizeURL(url):
+
+    return url
 
 ####################################################################################################
 def MetadataObjectForURL(url):
 
-    content_id = GetContentId(url)
+    pid = GetPID(url)
 
-    if not content_id:
+    if not pid:
         raise Ex.MediaNotAvailable
 
-    data = JSON.ObjectFromURL(FEED_URL % (content_id))
-    entry = data['entries'][0]
+    Log.Debug('* Episode PID: {}'.format(pid))
 
-    title = entry['title']
-    summary = entry['description'] if 'description' in entry else None
-    thumb = entry['plmedia$defaultThumbnailUrl'] if 'plmedia$defaultThumbnailUrl' in entry else None
-    show = entry['pl1$show'] if 'pl1$show' in entry else None
-    season = int(entry['pl1$season']) if 'pl1$season' in entry else None
-    index = int(entry['pl1$episode']) if 'pl1$episode' in entry else None
-    originally_available_at = Datetime.FromTimestamp(entry['pubDate'] / 1000).date() if 'pubDate' in entry else None
+    json_obj = JSON.ObjectFromURL(FEED_URL.format(pid))
+
+    title = json_obj['title']
+    summary = json_obj['description'] if 'description' in json_obj else None
+    thumb = json_obj['thumbnails'][0]['url'] if 'thumbnails' in json_obj else None
+    show = json_obj['pl1$show'] if 'pl1$show' in json_obj else None
+    season = int(json_obj['pl1$season']) if 'pl1$season' in json_obj and json_obj['pl1$season'] != "Special" else None
+    index = int(json_obj['pl1$episode']) if 'pl1$episode' in json_obj else None
+    originally_available_at = Datetime.FromTimestamp(json_obj['pubDate'] / 1000).date() if 'pubDate' in json_obj else None
 
     duration = None
-    if 'media$content' in entry:
-        if 'plfile$duration' in entry['media$content'][0]:
-            duration = int(float(entry['media$content'][0]['plfile$duration']) * 1000)
+
+    if 'content' in json_obj:
+
+        if 'duration' in json_obj['content'][0]:
+            duration = int(float(json_obj['content'][0]['duration']) * 1000)
 
     if show and season and index:
 
@@ -44,6 +52,7 @@ def MetadataObjectForURL(url):
         )
 
     else:
+
         return VideoClipObject(
             title = title,
             summary = summary,
@@ -57,58 +66,79 @@ def MediaObjectsForURL(url):
 
     return [
         MediaObject(
-            parts = [
-                PartObject(key=HTTPLiveStreamURL(Callback(PlayVideo, url=url)))
-            ],
             audio_channels = 2,
-            optimized_for_streaming = True
+            video_resolution = 540,
+            optimized_for_streaming = True,
+            parts = [
+                PartObject(
+                    key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+                )
+            ]
         )
     ]
 
 ####################################################################################################
-# http://www.foodnetwork.ca/shows/chuck-and-dannys-road-trip/video/episode/acadian-feast-from-the-east/video.html?v=909417027988
-
 @indirect
 def PlayVideo(url, **kwargs):
 
-    # Return example: 909417027988
-    content_id = GetContentId(url)
+    pid = GetPID(url)
 
-    if not content_id:
+    if not pid:
         raise Ex.MediaNotAvailable
 
-    Log.Debug('* Getting video URL from: {}'.format(FEED_URL % (content_id)))
+    Log.Debug('* PlayVideo Step 1 URL: {}'.format(FEED_URL.format(pid)))
 
-    # Example URL: http://feed.theplatform.com/f/dtjsEC/ukK8o58zbRmJ?form=json&byId=909417027988
-    data = JSON.ObjectFromURL(FEED_URL % (content_id))
-    media_content = data['entries'][0]['media$content']
+    json_obj = JSON.ObjectFromURL(FEED_URL.format(pid))
+    video_url = None
 
-    # Filter out non-video files and files without correct assetType; it seems that 
-    # only videos with assettype contains 'medium' will play without getting a 403;
-    # those videos are available @ video.foodnetwork.ca, whereas the unplayable sources
-    # are at foodnetwork-vh.akamaihd.net. 
-    # Possible assetTypes I've seen: "MP4 MBR", "DesktopHLS Default", "medium"
-    #
-    # We then sort by bitrate and then select the 
-    # highest bitrate, in case there are more than one result. Most cases there are only 1.
-    media_content = filter(lambda x: 'video' == x['plfile$contentType'] and 'medium' in x['plfile$assetTypes'], media_content)
-    media_content = sorted(media_content, lambda x: x['plfile$bitrate'])
-    media_content = media_content[0]['plfile$url']
+    for item in json_obj['content']:
 
-    # Example: http://link.theplatform.com/s/dtjsEC/bBKZI5cvUezM?feed=PROD%20-%20Food%20Videodrome%20Feed&mbr=true&format=SMIL&callback=jQuery1102019575666810641956_1491062935333
+        Log.Debug('* PlayVideo Step 2 URL: {}'.format(item['url'].replace('f4m', 'm3u')))
 
-    Log.Debug('* SMIL URL: {}'.format(media_content))
+        try:
 
-    xml = XML.ElementFromURL(media_content)
+            data = HTTP.Request(item['url'].replace('f4m', 'm3u') + '&manifest=m3u', follow_redirects=False).content
+            xml = XML.ElementFromString(data)
 
-    # Example: http://video.foodnetwork.ca/984/679/FOOD_ChuckDanny_E105_high_16x9.mp4?__hdnea__=st=1491057190~exp=1491064390~acl=/984/679/FOOD_ChuckDanny_E105_high_16x9.mp4*~hmac=4410bc12ddb93a81568260746a4aa6263451641e6180502e3141cb56f1c92f8a
-    video_src = xml.xpath('//a:video/@src', namespaces=SMIL_NS)[0].replace('https://', 'http://')
+            try:
+                video_url = xml.xpath('//a:video/@src', namespaces={'a': 'http://www.w3.org/2005/SMIL21/Language'})[0]
+            except:
+                if 'GeoLocationBlocked' in data:
+                    raise Ex.MediaGeoblocked
 
-    Log.Debug('* Video URL: {}'.format(video_src))
+        except Ex.RedirectError, e:
 
-    return IndirectResponse(VideoClipObject, key=video_src)
+            if 'Location' in e.headers:
+
+                master_playlist = GetData(e.headers['Location'])
+                sub_playlist = Regex('RESOLUTION=960x540.+\n(.+\.m3u8)').search(master_playlist).group(1)
+                base_url = e.headers['Location'].rsplit('/', 1)[0]
+
+                video_url = '%s/%s' % (base_url, sub_playlist)
+
+            else:
+                raise Ex.MediaNotAvailable
+        except:
+            raise Ex.MediaNotAvailable
+
+        if video_url:
+            break
+
+    if video_url:
+        return IndirectResponse(VideoClipObject, key=video_url)
+    else:
+        raise Ex.MediaNotAvailable
 
 ####################################################################################################
-def GetContentId(url):
+def GetPID(url):
 
     return url.rsplit('?v=', 1)[1]
+
+####################################################################################################
+def GetData(url):
+
+    req = urllib2.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36'})
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+    data = urllib2.urlopen(req, context=ssl_context).read()
+
+    return data
