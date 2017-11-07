@@ -78,7 +78,6 @@ def MediaObjectsForURL(url):
     ]
 
 ####################################################################################################
-@indirect
 def PlayVideo(url, **kwargs):
 
     pid = GetPID(url)
@@ -89,45 +88,46 @@ def PlayVideo(url, **kwargs):
     Log.Debug('* PlayVideo Step 1 URL: {}'.format(FEED_URL.format(pid)))
 
     json_obj = JSON.ObjectFromURL(FEED_URL.format(pid))
-    video_url = None
 
     for item in json_obj['content']:
+
+        if not 'f4m' in item['url']:
+            continue
 
         Log.Debug('* PlayVideo Step 2 URL: {}'.format(item['url'].replace('f4m', 'm3u')))
 
         try:
 
-            data = HTTP.Request(item['url'].replace('f4m', 'm3u') + '&manifest=m3u', follow_redirects=False).content
+            data = HTTP.Request(item['url'].replace('f4m', 'm3u'), follow_redirects=False).content
             xml = XML.ElementFromString(data)
 
             try:
                 video_url = xml.xpath('//a:video/@src', namespaces={'a': 'http://www.w3.org/2005/SMIL21/Language'})[0]
+                return GetData(video_url)
             except:
                 if 'GeoLocationBlocked' in data:
                     raise Ex.MediaGeoblocked
+                else:
+                    raise Ex.MediaNotAvailable
 
         except Ex.RedirectError, e:
 
             if 'Location' in e.headers:
 
-                master_playlist = GetData(e.headers['Location'])
-                sub_playlist = Regex('RESOLUTION=960x540.+\n(.+\.m3u8)').search(master_playlist).group(1)
                 base_url = e.headers['Location'].rsplit('/', 1)[0]
 
-                video_url = '%s/%s' % (base_url, sub_playlist)
+                playlist = GetData(e.headers['Location'])
+                playlist = RE_CLEANUP_M3U8.sub('', playlist)
 
+                playlist = RE_FIX_RELATIVE.sub('%s%s/%s' % ('\\1', base_url, '\\2'), playlist)
+
+                return playlist
             else:
                 raise Ex.MediaNotAvailable
         except:
             raise Ex.MediaNotAvailable
 
-        if video_url:
-            break
-
-    if video_url:
-        return IndirectResponse(VideoClipObject, key=video_url)
-    else:
-        raise Ex.MediaNotAvailable
+    raise Ex.MediaNotAvailable
 
 ####################################################################################################
 def GetPID(url):
