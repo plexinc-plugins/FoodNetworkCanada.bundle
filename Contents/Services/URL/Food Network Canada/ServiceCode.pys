@@ -5,6 +5,8 @@ Episode URL: http://www.foodnetwork.ca/shows/chuck-and-dannys-road-trip/video/ep
 '''
 
 FEED_URL = 'http://feed.theplatform.com/f/dtjsEC/ukK8o58zbRmJ/{}'
+RE_CLEANUP_M3U8 = Regex('#.+?RESOLUTION=(?!960x540).+?(\n)?.+?\.m3u8.*?\n')
+RE_FIX_RELATIVE = Regex('("|^)(?!https?:\/\/)([^"\n]+\.m3u8[^"\n]*)', Regex.MULTILINE) 
 
 ####################################################################################################
 def NormalizeURL(url):
