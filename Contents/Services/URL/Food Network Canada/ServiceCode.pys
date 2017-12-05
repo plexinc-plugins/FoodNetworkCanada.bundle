@@ -93,8 +93,8 @@ def PlayVideo(url, **kwargs):
 
     for item in json_obj['content']:
 
-        if not 'f4m' in item['url']:
-            continue
+        ##if not 'f4m' in item['url']:
+           ##continue
 
         Log.Debug('* PlayVideo Step 2 URL: {}'.format(item['url'].replace('f4m', 'm3u')))
 
