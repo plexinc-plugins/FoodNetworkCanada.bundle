@@ -5,8 +5,11 @@ Episode URL: http://www.foodnetwork.ca/shows/chuck-and-dannys-road-trip/video/ep
 '''
 
 FEED_URL = 'http://feed.theplatform.com/f/dtjsEC/ukK8o58zbRmJ/{}'
-RE_CLEANUP_M3U8 = Regex('#.+?RESOLUTION=(?!960x540).+?(\n)?.+?\.m3u8.*?\n')
-RE_FIX_RELATIVE = Regex('("|^)(?!https?:\/\/)([^"\n]+\.m3u8[^"\n]*)', Regex.MULTILINE) 
+
+RE_FIND_VERSIONS = Regex('RESOLUTION=(\d+)x')
+RE_FIX_RELATIVE = Regex('("|^)(?!https?:\/\/)([^"\n]+\.m3u8[^"\n]*)', Regex.MULTILINE)
+
+RE_CLEANUP_M3U8 = '#.+?RESOLUTION=(?!{}).+?(\n)?.+?\.m3u8.*?\n'
 
 ####################################################################################################
 def NormalizeURL(url):
@@ -119,7 +122,11 @@ def PlayVideo(url, **kwargs):
                 base_url = e.headers['Location'].rsplit('/', 1)[0]
 
                 playlist = GetData(e.headers['Location'])
-                playlist = RE_CLEANUP_M3U8.sub('', playlist)
+
+                versions = RE_FIND_VERSIONS.findall(playlist)
+                versions.sort(key=int, reverse=True)
+                cleanup_regex = Regex(RE_CLEANUP_M3U8.format(versions[0]))
+                playlist = cleanup_regex.sub('', playlist)
 
                 playlist = RE_FIX_RELATIVE.sub('%s%s/%s' % ('\\1', base_url, '\\2'), playlist)
 
